@@ -1,0 +1,6 @@
+### VSCode
+.vscode/*
+
+### output
+DB
+ConfigServer
