@@ -62,7 +62,7 @@ ConfigServer 就是这样的一款可观测 Agent 管控工具，目前支持：
           ghcr.io/ilogtail/config-server:latest
     ```
 
-2. 启动 UI（目前镜像仅支持amd64）
+2. 启动 UI
 
     ```shell
       docker run -d \
@@ -74,7 +74,7 @@ ConfigServer 就是这样的一款可观测 Agent 管控工具，目前支持：
 
 3. 启动 LoongCollector
 
-    创建 LoongCollector 配置文件（假设路径为 `/var/lib/loongcollector/conf/instance_config/local/loongcollector_config.json`）
+    创建 LoongCollector 配置文件（假设路径为 `/var/lib/loongcollector/conf/instance_config/local/loongcollector_config.json`，集群中可以用cm挂载）
 
     ```json
       {
