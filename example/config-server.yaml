@@ -1,0 +1,201 @@
+apiVersion: v1
+kind: List
+items:
+
+  - apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: config-server
+
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: database-config
+      namespace: config-server
+    data:
+      databaseConfig.json: |
+        {
+          "type": "mysql",
+          "userName": "root",
+          "password": "123456",
+          "host": "mysql",
+          "port": 3306,
+          "dbName": "test",
+          "autoMigrate": true
+        }
+
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: server-config
+      namespace: config-server
+    data:
+      serverConfig.json: |
+        {
+          "address": "0.0.0.0:9090",
+          "capabilities": {
+            "rememberAttribute": true,
+            "rememberPipelineConfigStatus": true,
+            "rememberInstanceConfigStatus": true,
+            "rememberCustomCommandStatus": false
+          },
+          "responseFlags": {
+            "fetchPipelineConfigDetail": true,
+            "fetchInstanceConfigDetail": false
+          },
+          "timeLimit": 60
+        }
+
+  - apiVersion: apps/v1
+    kind: StatefulSet
+    metadata:
+      name: mysql
+      namespace: config-server
+    spec:
+      serviceName: mysql
+      replicas: 1
+      selector:
+        matchLabels:
+          app: mysql
+      template:
+        metadata:
+          labels:
+            app: mysql
+        spec:
+          containers:
+          - name: mysql
+            image: mysql:latest
+            ports:
+            - containerPort: 3306
+            volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+            livenessProbe:
+              exec:
+                command: ["mysqladmin", "ping", "-h", "localhost"]
+              initialDelaySeconds: 30
+              periodSeconds: 10
+              timeoutSeconds: 5
+              failureThreshold: 5
+          volumes:
+          - name: mysql-data
+            persistentVolumeClaim:
+              claimName: mysql-pvc
+
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: mysql-pvc
+      namespace: config-server
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: mysql
+      namespace: config-server
+    spec:
+      selector:
+        app: mysql
+      ports:
+      - port: 3306
+        targetPort: 3306
+      clusterIP: None
+
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: config-server
+      namespace: config-server
+      labels:
+        app: config-server
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: config-server
+      template:
+        metadata:
+          labels:
+            app: config-server
+        spec:
+          containers:
+            - name: config-server
+              image: ghcr.io/ilogtail/config-server:latest
+              ports:
+                - containerPort: 9090
+              volumeMounts:
+                - name: database-config
+                  mountPath: /backend/cmd/config/prod/databaseConfig.json
+                  subPath: databaseConfig.json
+                - name: server-config
+                  mountPath: /backend/cmd/config/prod/serverConfig.json
+                  subPath: serverConfig.json
+          volumes:
+            - name: database-config
+              configMap:
+                name: database-config
+            - name: server-config
+              configMap:
+                name: server-config
+          imagePullSecrets:
+            - name: regcred
+
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: config-server
+      namespace: config-server
+    spec:
+      selector:
+        app: config-server
+      ports:
+        - port: 9090
+          targetPort: 9090
+      type: ClusterIP
+
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: config-server-ui
+      namespace: config-server
+      labels:
+        app: config-server-ui
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: config-server-ui
+      template:
+        metadata:
+          labels:
+            app: config-server-ui
+        spec:
+          containers:
+          - name: config-server-ui
+            image: ghcr.io/ilogtail/config-server:latest
+            ports:
+            - containerPort: 8080
+            env:
+            - name: CONFIG_SERVER_URL
+              value: "http://config-server:9090"
+          imagePullSecrets:
+          - name: regcred
+          
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: config-server-ui
+      namespace: config-server
+    spec:
+      selector:
+        app: config-server-ui
+      ports:
+      - port: 8080
+        targetPort: 8080
+      type: ClusterIP
