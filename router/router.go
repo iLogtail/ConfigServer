@@ -15,6 +15,12 @@
 package router
 
 import (
+	"embed"
+	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/iLogtail/ConfigServer/interface/agent"
@@ -22,11 +28,18 @@ import (
 	"github.com/iLogtail/ConfigServer/setting"
 )
 
+//go:embed statics
+var static embed.FS
+
 func InitRouter() {
 	router := gin.Default()
 
 	InitUserRouter(router)
 	InitAgentRouter(router)
+
+	router.Any("/api/v1/*proxyPath", reverseProxy(setting.GetSetting().IP+":"+setting.GetSetting().Port))
+
+	router.StaticFS("/", http.FS(static))
 
 	err := router.Run(setting.GetSetting().IP + ":" + setting.GetSetting().Port)
 	if err != nil {
@@ -64,5 +77,24 @@ func InitAgentRouter(router *gin.Engine) {
 
 		agentGroup.POST("/FetchPipelineConfig", agent.FetchPipelineConfig)
 		agentGroup.POST("/FetchAgentConfig", agent.FetchAgentConfig)
+	}
+}
+
+// reverseProxy 反向代理
+func reverseProxy(target string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		remote, err := url.Parse(target)
+		if err != nil {
+			c.String(http.StatusInternalServerError, "Bad target")
+			return
+		}
+
+		proxy := httputil.NewSingleHostReverseProxy(remote)
+		c.Request.URL.Path = strings.TrimPrefix(c.Request.URL.Path, "/api/v1")
+		c.Request.Host = remote.Host
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "*")
+		proxy.ServeHTTP(c.Writer, c.Request)
 	}
 }
