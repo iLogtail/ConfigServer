@@ -61,18 +61,8 @@ ConfigServer 就是这样的一款可观测 Agent 管控工具，目前支持：
           -p 8899:8899 \
           ghcr.io/ilogtail/config-server:latest
     ```
-
-2. 启动 UI
-
-    ```shell
-      docker run -d \
-          --name config-server-ui \
-          --network="host" \
-          -e CONFIG_SERVER_ADDRESS=http://127.0.0.1:8899 \
-          ghcr.io/ilogtail/config-server-ui:latest
-    ```
-
-3. 启动 LoongCollector
+  
+2. 启动 LoongCollector
 
     创建 LoongCollector 配置文件（假设路径为 `/var/lib/loongcollector/conf/instance_config/local/loongcollector_config.json`，集群中可以用cm挂载）
 
@@ -99,4 +89,4 @@ ConfigServer 就是这样的一款可观测 Agent 管控工具，目前支持：
 
 4. 验证
 
-    访问 UI `http://127.0.0.1:80/` ， 即可配置 Agent Group 与采集配置。
+    访问 UI `http://127.0.0.1:8899/` ， 即可配置 Agent Group 与采集配置。

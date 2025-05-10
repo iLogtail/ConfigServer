@@ -18,6 +18,20 @@ jobs:
         with:
           submodules: true
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Clone frontend repository
+        run: |
+          git clone https://github.com/ilogtail/config-server-ui.git
+          cd config-server-ui
+          yarn install
+          yarn build
+          cd ..
+          cp -r config-server-ui/dist/* router/statics/
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
 
