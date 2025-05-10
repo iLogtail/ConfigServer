@@ -17,8 +17,7 @@ package router
 import (
 	"embed"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
+	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -28,7 +27,7 @@ import (
 	"github.com/iLogtail/ConfigServer/setting"
 )
 
-//go:embed statics
+//go:embed statics/*
 var static embed.FS
 
 func InitRouter() {
@@ -37,13 +36,46 @@ func InitRouter() {
 	InitUserRouter(router)
 	InitAgentRouter(router)
 
-	router.Any("/api/v1/*proxyPath", reverseProxy(setting.GetSetting().IP+":"+setting.GetSetting().Port))
+	// rewrite /api/v1/
+	router.Any("/api/v1/*proxyPath", func(c *gin.Context) {
+		p := c.Param("proxyPath")
+		if strings.HasPrefix(p, "/User/") || strings.HasPrefix(p, "/Agent/") {
+			c.Request.URL.Path = p
+			router.HandleContext(c)
+			return
+		}
+		c.String(http.StatusNotFound, "unknown path: %s", p)
+	})
 
-	router.StaticFS("/", http.FS(static))
+	// 只处理静态文件
+	router.NoRoute(func(c *gin.Context) {
+		path := c.Request.URL.Path
+
+		// 如果是 /api/ 路径，返回 404
+		if strings.HasPrefix(path, "/api/") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "API not found"})
+			return
+		}
+
+		// default return index.html
+		if path == "/" || path == "" {
+			path = "/index.html"
+		}
+		embedPath := filepath.Join("statics", strings.TrimPrefix(path, "/"))
+
+		data, err := static.ReadFile(embedPath)
+		if err != nil {
+			c.String(http.StatusNotFound, "404 not found: %s", path)
+			return
+		}
+		c.Header("Content-Type", detectContentType(path))
+		c.Writer.WriteHeader(http.StatusOK)
+		_, _ = c.Writer.Write(data)
+	})
 
 	err := router.Run(setting.GetSetting().IP + ":" + setting.GetSetting().Port)
 	if err != nil {
-		panic(err)
+		panic("Failed to start server: " + err.Error())
 	}
 }
 
@@ -80,21 +112,26 @@ func InitAgentRouter(router *gin.Engine) {
 	}
 }
 
-// reverseProxy 反向代理
-func reverseProxy(target string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		remote, err := url.Parse(target)
-		if err != nil {
-			c.String(http.StatusInternalServerError, "Bad target")
-			return
-		}
-
-		proxy := httputil.NewSingleHostReverseProxy(remote)
-		c.Request.URL.Path = strings.TrimPrefix(c.Request.URL.Path, "/api/v1")
-		c.Request.Host = remote.Host
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "*")
-		proxy.ServeHTTP(c.Writer, c.Request)
+// detectContentType detects the content type based on the file extension.
+func detectContentType(name string) string {
+	switch filepath.Ext(name) {
+	case ".html":
+		return "text/html; charset=utf-8"
+	case ".js":
+		return "application/javascript"
+	case ".css":
+		return "text/css"
+	case ".json":
+		return "application/json"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".svg":
+		return "image/svg+xml"
+	case ".ico":
+		return "image/x-icon"
+	default:
+		return "application/octet-stream"
 	}
 }
